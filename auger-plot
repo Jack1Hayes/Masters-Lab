@@ -1,0 +1,54 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Apr  8 10:49:17 2021
+
+@author: Hayes
+"""
+#Ganzen wichtigen Datein für das Dokument
+import numpy as np
+import pylab as plb
+import matplotlib.pyplot as plt
+import scipy
+import pandas
+from scipy.misc import electrocardiogram
+from scipy.signal import find_peaks
+from scipy import optimize
+from scipy.optimize import curve_fit
+from scipy import asarray as ar,exp
+from scipy.optimize import leastsq
+import os
+import sys
+from os import listdir
+from os.path import isfile, join
+from subprocess import call
+
+from scipy.signal import find_peaks
+from scipy.signal import argrelextrema
+import glob
+
+#Reading all files from a folder
+#This python file needs to be saved in the Folder with the data
+
+result = glob.glob('*.txt')
+
+
+#Empty array creation
+X=[]
+Y=[]
+
+
+for i in range(len(result)):
+    f= np.loadtxt(result[i], unpack=True)
+    X.append(f[1])
+    Y.append(f[0])
+    #print(xAx)
+    #print(Intensity)
+
+for i in range(len(result)):   
+    plt.figure(1)
+    plt.plot(Y[i],X[i],label=(result[i].replace('.TXT', '')))
+    plt.legend(loc=1, prop={'size': 14})
+    plt.xlabel('binding energy eV')
+    plt.ylabel('Intensity (A.U.)')
+    #print(xAx)
+    #print(Intensity)
