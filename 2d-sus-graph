@@ -1,0 +1,67 @@
+"""
+Created on Wed Feb  3 11:51:41 2021
+
+@author: Hayes
+"""
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+T=np.arange(0,2,0.01)
+
+y1=[]
+y2=[]
+y3=[]
+for i in T:  
+    if i > 1:
+        y = 1/i*100
+        y1.append(y)
+    else:
+        y=100
+        y1.append(y)
+    
+y1.append(i)
+
+T1=np.arange(0.001,2,0.01)
+
+
+for j in T1:  
+        ya = 15/j -9
+        y2.append(ya)
+
+    
+y2.append(j)
+
+T2=np.arange(0.001,1,0.01)
+for k in T2:  
+        yb = k*100
+        y3.append(yb)
+
+    
+y3.append(k)
+
+z = np.full(123, 0.1)
+x=np.arange(-3,120)
+
+z1 = np.full(123, 1)
+x1=np.arange(-3,120)
+
+
+fig = plt.figure()
+ax = fig.add_axes([0.1, 0.1, 0.8, 0.8]) # main axes
+ax.plot(T,y1[0:-1],color = ('red'),linewidth=5, label = 'Ferromagnetic')
+#ax.plot(T1,y2[0:-1],color = ('red'),linewidth=5, label = 'Paramagnetic')
+ax.plot(T2,y3[0:-1],color = ('green'),linewidth=5, label = 'Antiferromagnetic')
+ax.plot(z,x,color = ('black'))
+ax.plot(z1,x1,'k--')
+ax.set_xlabel('Tempurature(T)', fontsize=20)
+ax.set_ylabel('Susceptibility($\chi$)', fontsize=20)
+ax.set_xticks([1])
+ax.set_xticklabels(['$T_{N}$'], fontsize=15)
+ax.set_ylim([-3,110])
+ax.set_xlim([0,1.7])
+ax.set_yticks([])
+#plt.legend(prop={'size': 20})
+ax.text(0.5, 60, r'$\chi_{\parallel}$', fontsize=25)
+ax.text(0.5, 90, r'$\chi_{\perp}$', fontsize=25)
+plt.show()
