@@ -1,0 +1,426 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jan 13 14:15:04 2021
+
+@author: Hayes
+"""
+import pyvisa
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import ctypes
+import time
+pigcsdll = ctypes.CDLL(r'C:\Users\Public\PI\C-843\PI_Programming_Files_C843_GCS_DLL\C843_GCS_DLL_x64.dll')
+import tkinter as tk
+import numpy as np
+
+
+rm = pyvisa.ResourceManager()
+#rm.list_resources()
+osci = rm.open_resource('USB::0x0699::0x0401::C021480::INSTR')
+kepco = rm.open_resource('GPIB0::6::0::INSTR')
+kepco.called = False
+print(osci.query('*IDN?'))
+
+class supergui():
+    def __init__(self,master):
+        self.master=master
+        self.state = 0
+        self.magnet_ok = 0
+        self.delay_ok = 0
+        self.field_index = 0
+        self.delay_index = 0
+        self.nscansfield = 0
+        self.nscansdelay = 0
+        self.singlefile = 1
+        self.delayfiles = 0
+        self.fieldfiles = 0
+        self.figures=[]
+        self.axis=[]
+        self.canvases = []
+        self.field_points=[]
+        self.delay_points=[]
+
+        self.stages = ctypes.create_string_buffer(1024)
+        self.position = ctypes.create_string_buffer(1024)
+        self.dstage = ctypes.create_string_buffer(b"M-505.6PD")
+        self.axes = ctypes.create_string_buffer(10)
+        self.cid = ctypes.c_int(1)
+        self.pos = ctypes.c_double(0.001)
+        self.qpos = ctypes.c_double(20.00)
+        self.qacc = ctypes.c_double(00.00000)
+        self.acc = ctypes.c_double(00.00000)
+        self.isref = ctypes.c_bool()
+        self.moving = ctypes.c_bool()
+        self.homep = ctypes.c_double(75)
+        
+        
+        
+        self.quit_button = tk.Button(master, text="Quit", command=self.quitter)
+        self.quit_button.grid(row=0,column=0,columnspan=2)
+        
+        self.meas_button = tk.Button(master,bg='red', text="Measure", command=self.measure)
+        self.meas_button.grid(row=1)
+        
+        self.pause_button = tk.Button(master, text="Pause", command=self.pause)
+        self.pause_button.grid(row=1,column=2)
+        
+        #self.pause_button = tk.Button(master, text="Save single file", command=self.singlefile)
+        #self.pause_button.grid(row=1,column=3)
+        
+        
+        self.remove_button = tk.Button(master, text="init magnet", command=self.init_magnet)
+        self.remove_button.grid(row=2,column=0)
+        
+        self.plotselect_button = tk.Button(master, text="init delaystage", command=self.init_delay)
+        self.plotselect_button.grid(row=2,column=2)
+        
+        self.l1 = tk.Label(root,text="min. (volt,mm)")
+        self.l1.grid(row=3,column=1)
+        self.l2 = tk.Label(root,text="max. (volt,mm)")
+        self.l2.grid(row=3,column=2)
+        self.l3 = tk.Label(root,text="step")
+        self.l3.grid(row=3,column=3)
+        
+        self.l6 = tk.Label(root,text="number of scans")
+        self.l6.grid(row=3,column=4)
+        
+        self.l7 = tk.Label(root,text="time per point (ms)")
+        self.l7.grid(row=3,column=5)
+        
+        self.l8 = tk.Label(root,text="time zero (mm)")
+        self.l8.grid(row=3,column=6)
+        
+        self.l4 = tk.Label(root,text="field")
+        self.l4.grid(row=4,column=0)
+        self.l5 = tk.Label(root,text="delay")
+        self.l5.grid(row=5,column=0)
+        
+        
+        self.fieldmin = tk.Entry(root,width=4)
+        self.fieldmin.insert(0,'-1') 
+        self.fieldmin.grid(row=4,column=1)
+        
+        self.fieldmax = tk.Entry(root,width=4)
+        self.fieldmax.insert(0,'1') 
+        self.fieldmax.grid(row=4,column=2)
+        
+        self.fieldstep = tk.Entry(root,width=4)
+        self.fieldstep.insert(0,'0.5') 
+        self.fieldstep.grid(row=4,column=3)
+        
+        self.ScanNfield = tk.Entry(root,width=4)
+        self.ScanNfield.insert(0,'1') 
+        self.ScanNfield.grid(row=4,column=4)
+        
+        self.dmin = tk.Entry(root,width=4)
+        self.dmin.insert(0,'0') 
+        self.dmin.grid(row=5,column=1)
+        
+        self.dmax = tk.Entry(root,width=4)
+        self.dmax.insert(0,'0') 
+        self.dmax.grid(row=5,column=2)
+        
+        self.dstep = tk.Entry(root,width=4)
+        self.dstep.insert(0,'0.05') 
+        self.dstep.grid(row=5,column=3)
+        
+        self.ScanNdelay = tk.Entry(root,width=4)
+        self.ScanNdelay.insert(0,'1') 
+        self.ScanNdelay.grid(row=5,column=4)
+        
+        self.tzero = tk.Entry(root,width=4)
+        self.tzero.insert(0,'75') 
+        self.tzero.grid(row=5,column=6)
+        
+        self.integration_time_fields = tk.Entry(root,width=4)
+        self.integration_time_fields.insert(0,'5000') 
+        self.integration_time_fields.grid(row=4,column=5)
+        
+        self.integration_time_delays = tk.Entry(root,width=4)
+        self.integration_time_delays.insert(0,'5000') 
+        self.integration_time_delays.grid(row=5,column=5)
+        
+
+    def get_flimits(self):
+        return float(self.fieldmin.get()),float(self.fieldmax.get())
+    
+    def get_fstep(self):
+        return float(self.fieldstep.get())
+    
+    def get_dlimits(self):
+        return float(self.dmin.get()),float(self.dmax.get())
+    
+    def get_dstep(self):
+        return float(self.dstep.get())
+    
+    def singlefile(self):
+        if gui1.state == 0:
+            self.singlefile = 1
+            self.delayfiles = 0
+            self.fieldfiles = 0
+    def delayfiles(self):
+        if gui1.state == 0:
+            self.singlefile = 0
+            self.delayfiles = 1
+            self.fieldfiles = 0
+    def fieldfiles(self):
+        if gui1.state == 0:
+            self.singlefile = 0
+            self.delayfiles = 0
+            self.fieldfiles = 1
+    
+    def init_delay(self):  
+        dlims = gui1.get_dlimits()
+        dstep = gui1.get_dstep()
+        
+        self.homep.value = float(self.tzero.get())
+        ID = pigcsdll.C843_Connect(self.cid)
+        pigcsdll.C843_qIDN(ID,self.stages)
+        print(self.stages.value)
+        pigcsdll.C843_qCST(ID, "1234", self.stages, 1023)
+        print(self.stages.value)
+        pigcsdll.C843_qSAI(ID, self.axes, 9)
+        print(self.axes.value)
+        pigcsdll.C843_CST(ID, "1", self.dstage)
+        pigcsdll.C843_qCST(ID, "1234", self.stages, 1023)
+        print(self.stages.value)
+        pigcsdll.C843_qSAI(ID, self.axes, 9)
+        print(self.axes.value)
+        pigcsdll.C843_INI(ID, "")
+        pigcsdll.C843_qPOS(ID,self.axes,ctypes.byref(self.qpos))
+        print('Initial position '+str(self.qpos.value))
+        pigcsdll.C843_REF(ID,self.axes)
+        pigcsdll.C843_IsMoving(ID,self.axes,ctypes.byref(self.moving))
+        while(self.moving.value):
+            pigcsdll.C843_IsMoving(ID,self.axes,ctypes.byref(self.moving))
+            time.sleep(1)
+            
+        lim0 = ctypes.c_double(dlims[0])
+        newp = ctypes.c_double(self.homep.value+lim0.value)
+        pigcsdll.C843_MOV(ID,self.axes,ctypes.byref(newp))
+        self.cid = ID    
+        
+        self.nscansdelay = float(self.ScanNdelay.get())
+        self.delay_points = create_delaypoints(dlims,dstep)
+        self.delay_ok = 1
+        print('delay stage initialized')
+        if self.magnet_ok == 1:
+            self.meas_button.config(bg='green')
+            
+        
+    
+    def init_magnet(self):
+        print(kepco.query('*IDN?'))
+        flims = gui1.get_flimits()
+        fstep = gui1.get_fstep()
+        self.nscansfield = float(self.ScanNfield.get())
+        self.field_points = create_fieldpoints(flims,fstep)
+        print(self.field_points)
+        self.magnet_ok = 1
+        set_field(self.field_points[0])
+        print('kepco initialized')
+        if self.delay_ok == 1:
+            self.meas_button.config(bg='green')
+            
+        
+    def quitter(self):
+        self.state = 0
+        for rd in range(len(recframes)):
+            if recframes[rd]:
+                recframes[rd].destroy()
+        root.destroy()
+        root.quit()
+
+    def measure(self):
+        if self.state == 1:
+            pass
+        else:
+            if self.magnet_ok == 1 and self.delay_ok == 1:
+                
+                recframes.append(tk.Tk())
+                recframes[-1].title('Intensity vs. field')
+                self.figures.append(Figure(figsize=(5,5), dpi=100))
+                self.axis.append(self.figures[-1].add_subplot(111))
+                self.axis[-1].plot([1,2,3,4,5,6,7,8],[5,6,1,3,8,9,3,5])
+                self.canvases.append(FigureCanvasTkAgg(self.figures[-1], recframes[-1]))
+                self.canvases[-1].draw()
+                self.canvases[-1].get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+                
+                recframes.append(tk.Tk())
+                recframes[-1].title('Intensity vs. delay')
+                self.figures.append(Figure(figsize=(5,5), dpi=100))
+                self.axis.append(self.figures[-1].add_subplot(111))
+                self.axis[-1].plot([1,2,3,4,5,6,7,8],[5,6,1,3,8,9,3,5])
+                self.canvases.append(FigureCanvasTkAgg(self.figures[-1], recframes[-1]))
+                self.canvases[-1].draw()
+                self.canvases[-1].get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+                
+                self.filepath_for_save = tk.filedialog.asksaveasfilename(parent=root, initialdir="C:\\Users\\localadmin\\Documents\\TRMOKE\\" , title='Please select a directory')
+                self.state = 1
+            else:
+                pass
+            
+    def pause(self):
+        
+        if self.state == 2:
+            self.pause_button.config(text='pause')
+            self.state == 1
+            
+        if self.state == 1:
+            self.state = 2
+            self.pause_button.config(text='continue')
+        else:
+            pass
+        
+class mokemeasurement():
+    def __init__(self):
+        self.measurement = []
+        self.intensity = []
+        self.field = []
+        self.delay = []
+        
+def get_values():
+    if gui1.state == 1:
+        
+        #val = np.random.random()
+        val1 = osci.query('MEASUrement:MEAS1:VALue?')
+        val2 = osci.query('MEASUrement:MEAS2:VALue?')
+        val = float(val1)/float(val2)
+        while(kepco.called == True):
+            print('stuck waiting')
+            time.sleep(0.05)
+        kepco.called = True
+        kepco_curr = float(kepco.query('meas:curr?'))
+        kepco.called = False
+        try:   
+            stagep = ctypes.c_double()
+            pigcsdll.C843_qPOS(gui1.cid,gui1.axes,ctypes.byref(stagep))
+            trmoke.delay.append(stagep.value)
+            trmoke.intensity.append(val)
+            trmoke.field.append(kepco_curr)
+            #trmoke.field.append(gui1.field_points[gui1.field_index])
+            #trmoke.delay.append(gui1.delay_points[gui1.delay_index])
+        except:
+            trmoke.field.append(float(gui1.fieldmin.get()))
+            trmoke.delay.append(float(gui1.dmin.get()))
+            trmoke.intensity.append(val)
+    lmain.after(200,get_values)
+
+def plot_values():
+    if gui1.state == 1:
+        if trmoke: 
+            data = trmoke.intensity
+            fields = trmoke.field
+            delays = trmoke.delay
+
+            gui1.axis[0].clear()
+            gui1.axis[0].plot(fields,data,linestyle='',marker='o',color=[0,0,1]) 
+            gui1.canvases[0].draw()
+            
+            gui1.axis[1].clear()
+            gui1.axis[1].plot(delays,data,linestyle='',marker='o',color=[0,0,1]) 
+            gui1.canvases[1].draw()
+    lmain.after(400,plot_values)
+
+def save_values():
+    if gui1.state == 1:
+        if gui1.singlefile == 1:
+            f=open(gui1.filepath_for_save,'w')
+            if trmoke:
+                np.savetxt(gui1.filepath_for_save,np.transpose(np.array(((trmoke.intensity),(trmoke.field),(trmoke.delay)))))
+                f.close()
+    lmain.after(500,save_values)
+        
+def ramp_field():
+    if gui1.state == 1:
+        if len(gui1.field_points)>1 and gui1.nscansfield>0:
+            newfield = gui1.field_points[gui1.field_index]
+            set_field(newfield)
+            gui1.field_index+=1
+            
+            if gui1.field_index == len(gui1.field_points):
+                gui1.nscansfield -= 1
+                if gui1.nscansfield == 0:
+                    if gui1.delay_index >= len(gui1.delay_points) or len(gui1.delay_points)==1 :
+                        set_field(0)
+                        set_delay(0)
+                        gui1.pause()
+                else:
+                    gui1.field_index = 0
+    lmain.after(int(gui1.integration_time_fields.get()),ramp_field)
+    
+def move_delay(): 
+    if gui1.state == 1:
+        if len(gui1.delay_points)>1 and gui1.nscansdelay>0:
+            if len(gui1.field_points) == 1 or gui1.nscansfield == 0:
+                newdelay = gui1.delay_points[gui1.delay_index]
+                set_delay(newdelay)
+                gui1.delay_index+=1
+                gui1.nscansfield = int(gui1.ScanNfield.get())
+                gui1.field_index = 0
+                if gui1.delay_index == len(gui1.delay_points):
+                    gui1.nscansdelay -= 1
+                    if gui1.nscansdelay == 0:
+                        if gui1.field_index >= len(gui1.field_points):
+                            set_field(0)
+                            set_delay(0)
+                            gui1.pause()
+    lmain.after(int(gui1.integration_time_delays.get()),move_delay)
+    
+def create_fieldpoints(limits,stepsize):
+    Npoints = int(abs(limits[0]-limits[1])/stepsize)
+    if Npoints == 0:
+        measurepoints = [limits[0]]
+    else:
+        measurepoints = np.linspace(limits[0],limits[1],Npoints+1)
+        measurepoints = np.concatenate((measurepoints,measurepoints[::-1]))
+    return measurepoints
+    
+def create_delaypoints(limits,stepsize):
+    Npoints = int(abs(limits[0]-limits[1])/stepsize)
+    if Npoints == 0:
+        measurepoints = [limits[0]]
+    else:
+        measurepoints = np.linspace(limits[0],limits[1],Npoints)
+    return measurepoints
+    
+
+def set_field(fieldvalue):
+    currval = str(fieldvalue)
+    #print('curr '+currval+';:outp on')
+    #while(kepco.called):
+    #        time.sleep(0.05)
+    #kepco.called = True
+    while(kepco.called == True):
+        kepco.write('volt '+currval+';:curr 10;:outp on')
+        kepco_curr = float(kepco.query('meas:curr?'))
+        if abs(kepco_curr - fieldvalue) <= 0.05:
+            print(kepco_curr,fieldvalue)
+            kepco.called = False
+            time.sleep(0.05)
+    #print(kepco.query('meas:volt?;:meas:curr?'))
+    pass
+
+def set_delay(delayvalue):
+    newp = ctypes.c_double(gui1.homep.value+delayvalue)
+    pigcsdll.C843_MOV(gui1.cid,gui1.axes,ctypes.byref(newp))
+    pass
+
+
+root = tk.Toplevel()
+gui1 = supergui(root)
+lmain = tk.Label(root)
+lmain.grid()
+recframes,field_points = [],[]
+trmoke = mokemeasurement()   
+
+if __name__ == "__main__":
+    ramp_field()
+    move_delay()
+    get_values()
+    plot_values()
+    save_values()
+
+    root.mainloop()
