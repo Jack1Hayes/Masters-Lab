@@ -1,0 +1,77 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 11 16:21:51 2021
+
+@author: Hayes
+"""
+
+import pyvisa
+import matplotlib.pyplot as plt
+import numpy as np
+#import time
+
+plt.cla()
+rm = pyvisa.ResourceManager()
+inst = rm.open_resource('USB::0x0699::0x0401::C021480::INSTR')
+#print(inst.query("*IDN?"))
+#print(inst.query("MEASUrement?"))
+#print(inst.query('MEASUrement:MEAS1:VALue?'))
+print(inst.query('MEASUrement:MEAS1:MEAn?'))
+
+t = np.arange(0,20,1)
+measv=np.zeros(len(t))
+measv1,measv2=[],[]
+#plt.figure(1) 
+#for ij in t:
+#    val = inst.query('MEASUrement:MEAS1:MEAn?')
+#    measv[ij]=float(val[:-1])
+#    time.sleep(0.2)
+
+    
+#plt.plot(t,measv,marker='o')
+#plt.show()
+    
+def live_plotter(x_vec,y1_data,yavg,line1,lineavg,identifier='',pause_time=0.2):
+    if line1==[]:
+        # this is the call to matplotlib that allows dynamic plotting
+        plt.ion()
+        fig = plt.figure(figsize=(13,6))
+        ax = fig.add_subplot(111)
+        # create a variable for the line so we can later update it
+        line1, = ax.plot(x_vec,y1_data,'-o',alpha=0.8)  
+        yavg=np.copy(y1_data).tolist()
+        lineavg, = ax.plot(x_vec,yavg,'-o',alpha=0.8,color=[1,0,0])   
+        #update plot label/title
+        plt.ylabel('Y Label')
+        plt.title('Title: {}'.format(identifier))
+        plt.show()
+    
+    # after the figure, axis, and line are created, we only need to update the y-data
+    line1.set_ydata(y1_data)
+    lineavg.set_ydata(yavg)
+    
+    # adjust limits if new data goes beyond bounds
+    if len(y1_data) > 100:
+        ydatalims=y1_data[-100:]
+        if np.min(ydatalims)<=line1.axes.get_ylim()[0] or np.max(ydatalims)>=line1.axes.get_ylim()[1]:
+            plt.ylim([np.min(ydatalims)-np.std(ydatalims),np.max(ydatalims)+np.std(ydatalims)])
+    # this pauses the data so the figure/axis can catch up - the amount of pause can be altered above
+    plt.pause(pause_time)
+    
+    # return line so we can update it again in the next iteration
+    return line1,lineavg
+
+size = 10000
+x_vec = np.linspace(0,1,size+1)[0:-1]
+y_vec1,yavg = np.zeros(len(x_vec)),np.zeros(len(x_vec))
+line1,lineavg = [],[]
+while True:
+    val1 = inst.query('MEASUrement:MEAS1:VALue?')
+    val2 = inst.query('MEASUrement:MEAS2:VALue?')
+    measv1.append(float(val1[:-1])/float(val2[:-1]))
+    y_vec1[-1] = measv1[-1]
+    yavg[-1] = np.average(y_vec1[-50:])
+    line1,lineavg = live_plotter(x_vec,y_vec1,yavg,line1,lineavg)
+    #line2 = live_plotter(x_vec,y_vec2,line2)
+    y_vec1 = np.append(y_vec1[1:],0.0)
+    yavg = np.append(yavg[1:],0.0)
