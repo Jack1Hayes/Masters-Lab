@@ -1,0 +1,142 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 12 09:19:17 2020
+
+@author: Hayes
+"""
+#Import functions
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import scipy
+from scipy import optimize
+from scipy.signal import find_peaks
+
+
+
+
+#Load all data files out of one folder
+dirPath = r"C:\\Users\\Hayes\\OneDrive\\Documents\\Masters Lab\\Long\\"
+Endung_File=r".TXT"
+[_ for _ in os.listdir(dirPath) if _ .endswith(Endung_File)]
+result = next(os.walk(dirPath))[2]
+
+
+#creation of plotting enviorement
+plt.figure(1)
+plt.clf()
+plt.figure(2)
+plt.clf()
+plt.figure(3)
+plt.clf()
+plt.figure(4)
+plt.clf()
+plt.figure(5)
+plt.clf()
+
+#creation of empty arrays
+Energy=[]
+Intensity=[]
+Ys=[]
+Maximum=[]
+Minimum=[]
+Difference=[]
+initial_Energy=[60,235,260,275,490,540,575,630]
+final_Energy=[85,250,275,300,525,560,600,650]
+a=[]
+b=[]
+maxvalue=[]
+minvalue=[]
+
+
+
+
+#defining the background functions
+
+#linear background
+def linfunc(x,m,c):
+    return m*x+c
+#quadratic background    
+def quadfunc(x,a,b,c):
+    return a*(x-b)**2+c
+
+
+#Load the data
+#skiprow depends on the file header
+for names in result:
+    data = np.loadtxt(dirPath+names,skiprows=0).transpose()
+    #print(data)
+    Energy.append(data[1]*0.25*1000)
+    Intensity.append(data[0]*10000)
+    #print("Intensity",Intensity)
+    #peaks
+    x = np.array(Intensity)[0]
+    # peak maxima
+    peaks, _ = find_peaks(x, prominence=(0.02))
+    #plt.figure(1)
+    #valleys
+    inv_x = x**(-1)
+    valley_peaks, _ = find_peaks(inv_x, prominence=(0.005))
+   
+   #creation of the peak maxima regions
+    
+    for n in initial_Energy:
+        value1=int((n-Energy[0][0])/(Energy[0][1]-Energy[0][0]))
+        a.append(value1)
+            
+    for m in final_Energy:
+        value2=int((m-Energy[0][0])/(Energy[0][1]-Energy[0][0]))
+        b.append(value2)
+    
+    x1=len(a)       
+
+    for i in range(x1):
+        value_between=x[a[i]:b[i]]
+        maxvalue=np.amax(value_between)
+        minvalue=np.amin(value_between)
+        #Peak maximum
+        #print("Maximum peak height is ",maxvalue, "a.u. in the range ",(a[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0]), "to", (b[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0]))
+        #Peak minimum
+        #print("Minimum peak height is ",minvalue, "a.u. in the range ",(a[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0]), "to", (b[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0]))
+        #peak to peak heights
+        #print("peak to peak distance is ", maxvalue-minvalue, "a.u")
+        
+        start = a[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0]
+        finish = (b[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0])
+        
+        stepsize=np.arange(start,finish,Energy[0][1]-Energy[0][0])
+        
+        #plt.figure(1)
+        #plotting of the scan
+        fig, (ax1) = plt.subplots(nrows=1, ncols=1, sharey = True)
+        plt.plot(stepsize,value_between,label='Auger data')
+        #creation of maxima points
+        plt.plot(peaks*(Energy[0][1]-Energy[0][0])+Energy[0][0], x[peaks], "rx",label='local maximum peaks')
+        #creation of valley peaks
+        plt.plot(valley_peaks*(Energy[0][1]-Energy[0][0])+Energy[0][0], x[valley_peaks],"kx",label='local minimum peaks')
+        plt.xlim(((a[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0]), (b[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0])))
+        #plt.ylim(maxvalue+0.02, minvalue-0.02)
+        plt.xlabel("Energy in [eV]")
+        plt.ylabel("Intensity in [a.u.]")
+        plt.title(str())
+        
+        value_between2 = np.delete(value_between,0)
+        stepsize2 = np.delete(stepsize,0)
+
+           
+        #data saving
+        
+        name1 = str(a[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0])[0:-2]
+        name2 = str(b[i]*(Energy[0][1]-Energy[0][0])+Energy[0][0])[0:-2]
+        name3 = r"C:\\Users\\Hayes\\OneDrive\\Documents\\Masters Lab\\save data\\" + name1 +"to"+ name2 + ".txt"
+        
+        with open (name3,"a") as file1:
+            for alpha, beta, gamma, omega, zeta in zip((np.array(stepsize).T), (np.array(value_between).T), (np.array([minvalue]).T), (np.array([maxvalue]).T), (np.array([maxvalue-minvalue]).T)):
+                file1.write('{0:25}{1:25}{2:25}{3:25}{4:25}\n'.format(str(alpha),str(beta),str(gamma), str(omega), str(zeta)))    
+        with open (name3,"a") as file1:
+            for alpha, beta in zip((np.array(stepsize2).T), (np.array(value_between2).T)):
+                 file1.write('{0:25}{1:25}\n'.format(str(alpha), str(beta)))
+        file1.close() 
+
+    #plt.legend()
+plt.show()
